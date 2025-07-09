@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTSP Stream Viewer</title>
+</head>
+<body>
+    <!-- 使用 canvas 替代 video 标签 -->
+    <canvas id="video-canvas"></canvas>
+    
+    <!-- 确保路径正确 -->
+    <script src="./node_modules/jsmpeg-player/build/jsmpeg-player.min.js"></script>
+    
+    <script>
+        var canvas = document.getElementById('video-canvas');
+          // 设置初始canvas大小
+        canvas.width = 1280;
+        canvas.height = 720;
+    
+        var player = new JSMpeg.Player('ws://localhost:9999', {
+            canvas: canvas,
+            autoplay: true,
+            audio: false,
+            reconnectInterval: 5000,
+            // 添加视频缓冲设置
+            videoBufferSize: 1024*1024,    // 1MB 视频缓冲
+            streaming: true,
+            maxAudioLag: 0,
+            onConnect: function() {
+                console.log('WebSocket connected');
+            },
+            onError: function(error) {
+                console.error('JSMpeg error:', error);
+            }
+        });
+    </script>
+
+  
+<style>
+    /* 添加CSS样式使canvas自适应容器大小 */
+    #video-canvas {
+        width: 100%;      /* 宽度填满容器 */
+        height: auto;     /* 高度自动调整保持比例 */
+        max-width: 1280px;  /* 最大不超过原始分辨率 */
+        display: block;   /* 块级元素 */
+        margin: 0 auto;   /* 居中显示 */
+        object-fit: contain; /* 保持纵横比 */
+    }
+
+    /* 可选：设置容器样式 */
+    body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+</style>
+
+</body>
+</html>

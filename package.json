@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "fluent-ffmpeg": "^2.1.3",
+    "jsmpeg-player": "^3.0.3",
+    "mysql2": "^3.14.1",
+    "ws": "^8.18.3"
+  }
+}
