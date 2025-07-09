@@ -14,10 +14,10 @@
     <script>
         var canvas = document.getElementById('video-canvas');
           // 设置初始canvas大小
-        canvas.width = 1280;
-        canvas.height = 720;
+        canvas.width = 1920;
+        canvas.height = 1080;
     
-        var player = new JSMpeg.Player('ws://localhost:9999', {
+        var player = new JSMpeg.Player('ws://localhost:9999/ws/stream/50', {
             canvas: canvas,
             autoplay: true,
             audio: false,
