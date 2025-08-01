@@ -10,7 +10,7 @@ app.use(cors());               // 再 use cors
 // ffmpeg.setFfmpegPath('D:/BaiduNetdiskDownload/ffmpeg-7.1.1-essentials_build/bin/ffmpeg.exe'); // 你的ffmpeg路径
 
 // 服务器配置
-const httpHost = '192.168.31.168';
+const httpHost = '192.168.31.120';
 const httpPort = 9999;
 
 // 数据库配置
