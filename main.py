@@ -316,7 +316,12 @@ async def websocket_handler(websocket: WebSocketServerProtocol, path: str):
 
 # 启动WebSocket服务器
 async def start_websocket_server():
-    async with serve(websocket_handler, HTTP_HOST, 9998):
+    # 配置WebSocket服务器，允许所有来源
+    async def process_request(path, headers):
+        # 允许所有来源的WebSocket连接
+        return None
+    
+    async with serve(websocket_handler, HTTP_HOST, 9998, process_request=process_request):
         logger.info(f"WebSocket服务器已启动: ws://{HTTP_HOST}:9998")
         await asyncio.Future()  # 保持运行
 
