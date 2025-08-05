@@ -147,6 +147,9 @@
         let frameCount = 0;
         let lastFrameTime = 0;
         let fps = 0;
+        let isProcessingFrame = false; // 防止重复处理帧
+        let pendingFrame = null; // 待处理的帧
+        let statsUpdateTimer = null; // 统计信息更新定时器
 
         function updateStatus(status, message) {
             const statusDiv = document.getElementById('status');
@@ -161,6 +164,22 @@
         function updateStats() {
             document.getElementById('fps').textContent = fps.toFixed(1);
             document.getElementById('frameCount').textContent = frameCount;
+        }
+
+        // 优化：使用requestAnimationFrame来更新统计信息，减少DOM操作
+        function startStatsUpdate() {
+            if (statsUpdateTimer) return;
+            
+            statsUpdateTimer = setInterval(() => {
+                updateStats();
+            }, 100); // 每100ms更新一次统计信息，而不是每帧都更新
+        }
+
+        function stopStatsUpdate() {
+            if (statsUpdateTimer) {
+                clearInterval(statsUpdateTimer);
+                statsUpdateTimer = null;
+            }
         }
 
         function connectStream() {
@@ -178,12 +197,13 @@
             updateInfo('正在建立WebSocket连接...');
 
             // 连接WebSocket
-            ws = new WebSocket(`ws://192.168.31.168:9998/ws/stream/${deviceId}`);
+            ws = new WebSocket(`ws://192.168.31.120:9998/ws/stream/${deviceId}`);
 
             ws.onopen = function() {
                 updateStatus('connected', '已连接');
                 updateInfo(`WebSocket已连接，设备ID: ${deviceId}`);
                 console.log('WebSocket连接已建立');
+                startStatsUpdate();
             };
 
             ws.onmessage = function(event) {
@@ -194,8 +214,11 @@
                         updateInfo(`连接成功，设备ID: ${data.deviceId}`);
                         console.log('收到连接确认:', data);
                     } else if (data.type === 'frame') {
-                        // 处理视频帧
-                        handleFrame(data.data);
+                        // 优化：使用帧丢弃机制，只处理最新帧
+                        pendingFrame = data.data;
+                        if (!isProcessingFrame) {
+                            processNextFrame();
+                        }
                     } else if (data.type === 'pong') {
                         console.log('收到pong响应');
                     }
@@ -208,34 +231,50 @@
                 updateStatus('disconnected', '连接已断开');
                 updateInfo('WebSocket连接已断开');
                 console.log('WebSocket连接已关闭:', event.code, event.reason);
+                stopStatsUpdate();
             };
 
             ws.onerror = function(error) {
                 updateStatus('disconnected', '连接错误');
                 updateInfo('WebSocket连接错误');
                 console.error('WebSocket错误:', error);
+                stopStatsUpdate();
             };
         }
 
-        function handleFrame(base64Data) {
+        // 优化：分离帧处理逻辑，使用帧丢弃机制
+        function processNextFrame() {
+            if (!pendingFrame || isProcessingFrame) {
+                return;
+            }
+
+            isProcessingFrame = true;
+            const frameData = pendingFrame;
+            pendingFrame = null; // 清空待处理帧
+
+            // 优化：重用Image对象，避免重复创建
             img.onload = function() {
-                // 清除画布
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // 绘制图像
+                // 优化：不每次都clearRect，直接绘制
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 
-                // 更新统计信息
+                // 更新统计信息（减少频率）
                 frameCount++;
                 const now = performance.now();
                 if (lastFrameTime > 0) {
                     fps = 1000 / (now - lastFrameTime);
                 }
                 lastFrameTime = now;
-                updateStats();
+                
+                isProcessingFrame = false;
+                
+                // 检查是否还有待处理的帧
+                if (pendingFrame) {
+                    // 使用requestAnimationFrame确保在下一帧处理
+                    requestAnimationFrame(processNextFrame);
+                }
             };
             
-            img.src = 'data:image/jpeg;base64,' + base64Data;
+            img.src = 'data:image/jpeg;base64,' + frameData;
         }
 
         function disconnectStream() {
@@ -245,6 +284,7 @@
             }
             updateStatus('disconnected', '已断开连接');
             updateInfo('已断开连接');
+            stopStatsUpdate();
             
             // 清除画布
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -252,6 +292,8 @@
             // 重置统计
             frameCount = 0;
             fps = 0;
+            isProcessingFrame = false;
+            pendingFrame = null;
             updateStats();
         }
 
