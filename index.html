@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTSP视频流测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #videoCanvas {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            max-width: 100%;
+            background: #000;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .input-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 100px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .info {
+            background-color: #e7f3ff;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RTSP视频流测试</h1>
+        
+        <div class="info">
+            <strong>说明：</strong>
+            <ul>
+                <li>输入设备ID（如：1）来连接对应的摄像头</li>
+                <li>系统会自动从数据库查询设备信息并建立RTSP连接</li>
+                <li>视频流通过WebSocket实时推送到前端</li>
+            </ul>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <label for="deviceId">设备ID:</label>
+                <input type="text" id="deviceId" value="36" placeholder="输入设备ID">
+            </div>
+            <button class="btn-primary" onclick="connectStream()">连接视频流</button>
+            <button class="btn-danger" onclick="disconnectStream()">断开连接</button>
+        </div>
+
+        <div id="status" class="status disconnected">
+            状态: 未连接
+        </div>
+
+        <div class="video-container">
+            <canvas id="videoCanvas" width="1280" height="720"></canvas>
+        </div>
+
+        <div id="info">
+            <p><strong>连接信息:</strong></p>
+            <p id="connectionInfo">未连接</p>
+            <p><strong>帧率:</strong> <span id="fps">0</span> FPS</p>
+            <p><strong>接收帧数:</strong> <span id="frameCount">0</span></p>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let canvas = document.getElementById('videoCanvas');
+        let ctx = canvas.getContext('2d');
+        let img = new Image();
+        let frameCount = 0;
+        let lastFrameTime = 0;
+        let fps = 0;
+
+        function updateStatus(status, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${status}`;
+            statusDiv.textContent = `状态: ${message}`;
+        }
+
+        function updateInfo(info) {
+            document.getElementById('connectionInfo').textContent = info;
+        }
+
+        function updateStats() {
+            document.getElementById('fps').textContent = fps.toFixed(1);
+            document.getElementById('frameCount').textContent = frameCount;
+        }
+
+        function connectStream() {
+            const deviceId = document.getElementById('deviceId').value.trim();
+            if (!deviceId) {
+                alert('请输入设备ID');
+                return;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+
+            updateStatus('connecting', '正在连接...');
+            updateInfo('正在建立WebSocket连接...');
+
+            // 连接WebSocket
+            ws = new WebSocket(`ws://192.168.31.168:9998/ws/stream/${deviceId}`);
+
+            ws.onopen = function() {
+                updateStatus('connected', '已连接');
+                updateInfo(`WebSocket已连接，设备ID: ${deviceId}`);
+                console.log('WebSocket连接已建立');
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'connection') {
+                        updateInfo(`连接成功，设备ID: ${data.deviceId}`);
+                        console.log('收到连接确认:', data);
+                    } else if (data.type === 'frame') {
+                        // 处理视频帧
+                        handleFrame(data.data);
+                    } else if (data.type === 'pong') {
+                        console.log('收到pong响应');
+                    }
+                } catch (e) {
+                    console.error('解析消息失败:', e);
+                }
+            };
+
+            ws.onclose = function(event) {
+                updateStatus('disconnected', '连接已断开');
+                updateInfo('WebSocket连接已断开');
+                console.log('WebSocket连接已关闭:', event.code, event.reason);
+            };
+
+            ws.onerror = function(error) {
+                updateStatus('disconnected', '连接错误');
+                updateInfo('WebSocket连接错误');
+                console.error('WebSocket错误:', error);
+            };
+        }
+
+        function handleFrame(base64Data) {
+            img.onload = function() {
+                // 清除画布
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // 绘制图像
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                // 更新统计信息
+                frameCount++;
+                const now = performance.now();
+                if (lastFrameTime > 0) {
+                    fps = 1000 / (now - lastFrameTime);
+                }
+                lastFrameTime = now;
+                updateStats();
+            };
+            
+            img.src = 'data:image/jpeg;base64,' + base64Data;
+        }
+
+        function disconnectStream() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            updateStatus('disconnected', '已断开连接');
+            updateInfo('已断开连接');
+            
+            // 清除画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 重置统计
+            frameCount = 0;
+            fps = 0;
+            updateStats();
+        }
+
+        // 定期发送ping保持连接
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({type: 'ping'}));
+            }
+        }, 30000);
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStats();
+        });
+    </script>
+</body>
+</html> 
