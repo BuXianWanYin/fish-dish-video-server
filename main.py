@@ -16,7 +16,7 @@ from typing import Dict, Set, Optional
 import logging
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 
 # 导入配置
